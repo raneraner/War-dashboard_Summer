@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ran's Holon Radar v2.3</title>
+    <title>Ran's Holon Radar v2.4</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -79,10 +79,10 @@
         #clock { font-size: 90px; margin-bottom: 0; line-height: 90px; color: #00E5FF; margin-top: 10px; }
         #date { font-size: 28px; color: #0088A3; margin-top: 5px; margin-bottom: 35px; }
 
-        #temp { font-size: 65px; font-weight: bold; margin-bottom: 15px; color: #00E5FF; margin-top: 15px; }
+        /* הגדרת ברירת מחדל למעלות - תוחלף דינמית ע"י ה-JS */
+        #temp { font-size: 65px; font-weight: bold; margin-bottom: 15px; margin-top: 15px; }
         #uv-info, #sunset-info { font-size: 26px; color: #00A3B8; margin-top: 12px; }
 
-        /* סגנון לאימוג'י השקיעה המינימליסטי */
         #sunset-icon {
             display: inline-block;
             vertical-align: middle;
@@ -100,7 +100,7 @@
         #holon-status { 
             font-size: 44px; border: 3px solid #00FF00; display: block; 
             padding: 15px 20px; color: #00FF00; box-sizing: border-box;
-            white-space: nowrap; /* מונע פיצול של "אין התרעות" בשורה השנייה */
+            white-space: nowrap;
         }
 
         #progress-container { 
@@ -194,7 +194,6 @@
         window.globalIsAlarmActive = false;
         window.globalLatestPushTimestamp = 0;
 
-        // גרפיקת SVG מינימליסטית של שקיעה (קווים בלבד בצבע הציאן)
         var sunsetIconSvg = '<svg id="sunset-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3M4.22 4.22l2.12 2.12M17.66 6.34l2.12-2.12M16 12a4 4 0 1 1-8 0"/><line x1="2" y1="18" x2="22" y2="18"/><path d="M4.22 19.78l1.58-1.58M18.2 18.2l1.58 1.58"/></svg>';
 
         function updateClock() {
@@ -209,7 +208,29 @@
             var url = "https://api.open-meteo.com/v1/forecast?latitude=32.01&longitude=34.78&current_weather=true&daily=uv_index_max,sunset&timezone=Asia%2FJerusalem";
             
             fetch(url).then(function(r){return r.json()}).then(function(data){
-                document.getElementById("temp").innerHTML = Math.round(data.current_weather.temperature) + "°C";
+                var tempVal = Math.round(data.current_weather.temperature);
+                var tempEl = document.getElementById("temp");
+                tempEl.innerHTML = tempVal + "°C";
+                
+                // חישוב פאלטת צבעים קלאסית (ציאן -> צהוב -> כתום -> אדום)
+                var r, g, b;
+                if (tempVal <= 20) {
+                    r = 0; g = 229; b = 255; // ציאן
+                } else if (tempVal <= 25) {
+                    var p = (tempVal - 20) / 5;
+                    r = Math.round(255 * p);
+                    g = Math.round(229 + (255 - 229) * p);
+                    b = Math.round(255 - 255 * p); // מעבר לצהוב
+                } else if (tempVal <= 30) {
+                    var p = (tempVal - 25) / 5;
+                    r = 255;
+                    g = Math.round(255 - 255 * p); // מעבר דרך כתום לאדום
+                    b = 0;
+                } else {
+                    r = 255; g = 0; b = 0; // אדום חזק
+                }
+                tempEl.style.color = "rgb(" + r + "," + g + "," + b + ")";
+
                 var uvMax = data.daily.uv_index_max[0];
                 var sunsetRaw = data.daily.sunset[0];
                 var sunsetTime = "--:--";
@@ -220,9 +241,7 @@
                         sunsetTime = parts[1].substring(0, 5);
                     }
                 }
-                // תיקון טקסט הקרינה (ללא המילה "היום")
                 document.getElementById("uv-info").innerHTML = "שיא קרינה: " + uvMax;
-                // שילוב האימוג'י המינימליסטי
                 document.getElementById("sunset-info").innerHTML = "שקיעה " + sunsetIconSvg + ": " + sunsetTime;
             });
         }
@@ -352,7 +371,6 @@
                             var tsP = dObjP.getTime();
                             if (tsP >= startOfDay) pushesToday++;
                             if (tsP > latestPushTime) {
-                                Math.max(latestPushTime, tsP);
                                 latestPushTime = tsP;
                                 var hP = dObjP.getHours(), mP = dObjP.getMinutes(), sP = dObjP.getSeconds();
                                 latestPushTimeStr = (hP < 10 ? "0"+hP : hP) + ":" + (mP < 10 ? "0"+mP : mP) + ":" + (sP < 10 ? "0"+sP : sP);
@@ -397,7 +415,6 @@
                 }
                 else { 
                     document.body.className = ""; 
-                    // תיקון פיצול הטקסט ושמירת "אין התרעות" כיחידה אחת
                     statusDiv.innerHTML = "חולון:<br>אין התרעות"; 
                 }
             }).catch(function(error) { isFetchingAlerts = false; });
