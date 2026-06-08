@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ran's Holon Radar v2.2</title>
+    <title>Ran's Holon Radar v2.3</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -76,12 +76,19 @@
         .separator { border-top: 2px dashed #004455; margin: 20px auto; width: 95%; }
         .section-title { font-size: 24px; color: #0088A3; margin-bottom: 12px; }
 
-        /* מדדי פנל שמאל (היום) */
         #clock { font-size: 90px; margin-bottom: 0; line-height: 90px; color: #00E5FF; margin-top: 10px; }
         #date { font-size: 28px; color: #0088A3; margin-top: 5px; margin-bottom: 35px; }
 
         #temp { font-size: 65px; font-weight: bold; margin-bottom: 15px; color: #00E5FF; margin-top: 15px; }
         #uv-info, #sunset-info { font-size: 26px; color: #00A3B8; margin-top: 12px; }
+
+        /* סגנון לאימוג'י השקיעה המינימליסטי */
+        #sunset-icon {
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+            margin-left: 8px;
+        }
 
         #status-wrapper {
             display: inline-block;
@@ -90,10 +97,10 @@
             width: 90%;
         }
 
-        /* הגדלת קופסת המלחמה והחזרה לירוק מבצעי */
         #holon-status { 
             font-size: 44px; border: 3px solid #00FF00; display: block; 
             padding: 15px 20px; color: #00FF00; box-sizing: border-box;
+            white-space: nowrap; /* מונע פיצול של "אין התרעות" בשורה השנייה */
         }
 
         #progress-container { 
@@ -115,7 +122,6 @@
         .col-right { text-align: right; width: 50%; }
         .col-center { text-align: center; width: 47%; }
         
-        /* הזזת עודכן לפינה הימנית התחתונה של פנל המלחמה */
         #update-block { 
             text-align: right; 
             margin-top: 45px; 
@@ -142,7 +148,7 @@
         <div id="right-panel" class="panel">
             <div class="section-title">מלחמה:</div>
             <div id="status-wrapper">
-                <div id="holon-status">חולון: אין התרעות</div>
+                <div id="holon-status">חולון:<br>אין התרעות</div>
                 <div id="progress-container"><div id="progress-bar"></div></div>
             </div>
             
@@ -188,6 +194,9 @@
         window.globalIsAlarmActive = false;
         window.globalLatestPushTimestamp = 0;
 
+        // גרפיקת SVG מינימליסטית של שקיעה (קווים בלבד בצבע הציאן)
+        var sunsetIconSvg = '<svg id="sunset-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3M4.22 4.22l2.12 2.12M17.66 6.34l2.12-2.12M16 12a4 4 0 1 1-8 0"/><line x1="2" y1="18" x2="22" y2="18"/><path d="M4.22 19.78l1.58-1.58M18.2 18.2l1.58 1.58"/></svg>';
+
         function updateClock() {
             var now = new Date();
             var h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
@@ -211,8 +220,10 @@
                         sunsetTime = parts[1].substring(0, 5);
                     }
                 }
-                document.getElementById("uv-info").innerHTML = "שיא קרינה היום: " + uvMax;
-                document.getElementById("sunset-info").innerHTML = "שקיעה 🌅: " + sunsetTime;
+                // תיקון טקסט הקרינה (ללא המילה "היום")
+                document.getElementById("uv-info").innerHTML = "שיא קרינה: " + uvMax;
+                // שילוב האימוג'י המינימליסטי
+                document.getElementById("sunset-info").innerHTML = "שקיעה " + sunsetIconSvg + ": " + sunsetTime;
             });
         }
 
@@ -341,6 +352,7 @@
                             var tsP = dObjP.getTime();
                             if (tsP >= startOfDay) pushesToday++;
                             if (tsP > latestPushTime) {
+                                Math.max(latestPushTime, tsP);
                                 latestPushTime = tsP;
                                 var hP = dObjP.getHours(), mP = dObjP.getMinutes(), sP = dObjP.getSeconds();
                                 latestPushTimeStr = (hP < 10 ? "0"+hP : hP) + ":" + (mP < 10 ? "0"+mP : mP) + ":" + (sP < 10 ? "0"+sP : sP);
@@ -385,7 +397,8 @@
                 }
                 else { 
                     document.body.className = ""; 
-                    statusDiv.innerHTML = "חולון: אין התרעות"; 
+                    // תיקון פיצול הטקסט ושמירת "אין התרעות" כיחידה אחת
+                    statusDiv.innerHTML = "חולון:<br>אין התרעות"; 
                 }
             }).catch(function(error) { isFetchingAlerts = false; });
         }
