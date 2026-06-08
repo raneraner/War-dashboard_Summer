@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ran's Holon Radar v2</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+    <style>
+        @-webkit-keyframes flicker { 0% { opacity: 0.96; } 50% { opacity: 1; } 100% { opacity: 0.98; } }
+        @-webkit-keyframes redAlert { 0% { background-color: black; } 50% { background-color: #ff0000; } 100% { background-color: black; } }
+        @-webkit-keyframes orangeAlert { 0% { background-color: black; } 50% { background-color: #ff7700; } 100% { background-color: black; } }
+
+        body::after {
+          content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+          background: -webkit-linear-gradient(top, rgba(0,0,0,0) 50%, rgba(0,0,0,0.1) 50%);
+          background-size: 100% 4px; z-index: 999; pointer-events: none;
+        }
+
+        body { 
+            background-color: black; color: #00E5FF; font-family: monospace; 
+            text-align: center; padding-top: 1%; overflow: hidden; direction: rtl;
+            -webkit-animation: flicker 0.15s infinite;
+        }
+
+        body.emergency { -webkit-animation: redAlert 0.4s infinite !important; }
+        body.emergency #holon-status { 
+            border-color: #ffffff; color: #ffffff; background-color: #ff0000;
+            font-weight: bold;
+        }
+        body.shrapnel-alert #holon-status { 
+            border-color: #ffffff; color: #ffffff; background-color: #ff0000;
+            font-weight: bold;
+        }
+
+        body.warning-flicker { -webkit-animation: orangeAlert 0.6s infinite !important; }
+        body.warning-flicker #holon-status { 
+            border-color: #ffffff; color: #ffffff; background-color: #ff7700;
+            font-weight: bold;
+        }
+        body.warning-static #holon-status { 
+            border-color: #ffffff; color: #ffffff; background-color: #ff7700;
+            font-weight: bold;
+        }
+
+        /* ארכיטקטורת המבנה המפוצל */
+        #dashboard-grid {
+            width: 98%;
+            margin: 0 auto;
+            overflow: hidden;
+            display: block;
+        }
+
+        .panel {
+            width: 48%;
+            box-sizing: border-box;
+            padding: 10px 15px;
+        }
+
+        #right-panel {
+            float: right;
+        }
+
+        #left-panel {
+            float: left;
+            border-right: 2px dashed #004455;
+        }
+
+        #bottom-panel {
+            clear: both;
+            width: 100%;
+            padding-top: 5px;
+        }
+
+        .separator { border-top: 2px dashed #004455; margin: 10px auto; width: 95%; }
+        .section-title { font-size: 22px; color: #0088A3; margin-bottom: 6px; }
+
+        #clock { font-size: 80px; margin-bottom: 0; line-height: 80px; color: #00E5FF; }
+        #date { font-size: 26px; color: #0088A3; margin-top: 0px; margin-bottom: 10px; }
+
+        #temp { font-size: 55px; font-weight: bold; margin-bottom: 2px; color: #00E5FF; }
+        #weather-info { font-size: 24px; color: #00A3B8; }
+
+        #status-wrapper {
+            display: inline-block;
+            margin-top: 2px;
+            width: 90%;
+        }
+
+        #holon-status { 
+            font-size: 34px; border: 3px solid #00E5FF; display: block; 
+            padding: 8px 20px; color: #00E5FF; box-sizing: border-box;
+        }
+
+        #progress-container { 
+            width: 100%; height: 20px; border: 2px solid #004455; 
+            margin: 6px 0 0 0; display: none; background: black; box-sizing: border-box;
+        }
+        
+        #progress-bar { 
+            width: 0%; height: 100%; transition: width 1s linear, background-color 1s; 
+        }
+
+        #debug-table { width: 100%; margin: 12px auto 0 auto; font-size: 17px; border-collapse: collapse; direction: rtl; }
+        #debug-table td { padding: 5px; transition: color 0.3s; white-space: nowrap; }
+        
+        #row-alarms { color: #ff4444; }
+        #row-pushes { color: #ffaa00; }
+        
+        .col-sep { text-align: center; width: 3%; color: #004455 !important; }
+        .col-right { text-align: right; width: 37%; }
+        .col-center { text-align: center; width: 35%; }
+        .col-left { text-align: left; width: 25%; vertical-align: middle; }
+        
+        #update-cell { color: #00E5FF; }
+
+        /* עיצוב גרדיאנט קיצי לטיימר */
+        #timer { 
+            font-size: 32px; 
+            font-weight: bold; 
+            white-space: nowrap; 
+            background: -webkit-linear-gradient(45deg, #FFEB3B, #00E5FF);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="dashboard-grid">
+        <div id="right-panel" class="panel">
+            <div class="section-title">מבצעי מלחמה:</div>
+            <div id="status-wrapper">
+                <div id="holon-status">חולון: אין התרעות</div>
+                <div id="progress-container"><div id="progress-bar"></div></div>
+            </div>
+            
+            <table id="debug-table">
+                <tr id="row-alarms">
+                    <td class="col-right">אזעקה אחרונה: <span id="val-alarm-last">טוען...</span></td>
+                    <td class="col-sep">|</td>
+                    <td class="col-center">אזעקות ביממה: <span id="val-alarm-count">0</span></td>
+                    <td class="col-sep" rowspan="2">|</td>
+                    <td class="col-left" rowspan="2" id="update-cell">עודכן:<br><span id="val-sys-upd">--:--:--</span></td>
+                </tr>
+                <tr id="row-pushes">
+                    <td class="col-right">התרעה אחרונה: <span id="val-push-last">טוען...</span></td>
+                    <td class="col-sep">|</td>
+                    <td class="col-center">התרעות ביממה: <span id="val-push-count">0</span></td>
+                </tr>
+            </table>
+        </div>
+
+        <div id="left-panel" class="panel">
+            <div id="clock">00:00:00</div>
+            <div id="date">--/--/----</div>
+            
+            <div class="section-title">אקלים ומדדים:</div>
+            <div id="temp">--°C</div>
+            <div id="weather-info">טוען מדדי קרינה ושקיעה...</div>
+        </div>
+    </div>
+
+    <div class="separator"></div>
+
+    <div id="bottom-panel">
+        <div class="section-title">☀️ הספירה לאחור לתחילת החופש הגדול 🌊</div>
+        <div id="timer">טוען...</div>
+    </div>
+
+    <script>
+        var lastSuccessTime = new Date().getTime();
+        var isFetchingAlerts = false; 
+        var lockTime = 0; 
+        
+        window.globalIsAlarmActive = false;
+        window.globalLatestPushTimestamp = 0;
+
+        function updateClock() {
+            var now = new Date();
+            var h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+            if (h < 10) h = "0" + h; if (m < 10) m = "0" + m; if (s < 10) s = "0" + s;
+            document.getElementById("clock").innerHTML = h + ":" + m + ":" + s;
+            document.getElementById("date").innerHTML = now.toLocaleDateString("he-IL");
+        }
+
+        function updateWeather() {
+            var url = "https://api.open-meteo.com/v1/forecast?latitude=32.01&longitude=34.78&current_weather=true&daily=uv_index_max,sunset&timezone=Asia%2FJerusalem";
+            
+            fetch(url).then(function(r){return r.json()}).then(function(data){
+                document.getElementById("temp").innerHTML = Math.round(data.current_weather.temperature) + "°C";
+                var uvMax = data.daily.uv_index_max[0];
+                var sunsetRaw = data.daily.sunset[0];
+                var sunsetTime = "--:--";
+                
+                if (sunsetRaw) {
+                    var parts = sunsetRaw.split("T");
+                    if (parts[1]) {
+                        sunsetTime = parts[1].substring(0, 5);
+                    }
+                }
+                document.getElementById("weather-info").innerHTML = "שיא קרינה היום: " + uvMax + " | שקיעה: " + sunsetTime;
+            });
+        }
+
+        function updateProgressBar() {
+            var pContainer = document.getElementById("progress-container");
+            var pBar = document.getElementById("progress-bar");
+            
+            if (!pContainer || !pBar) return;
+            
+            if (window.globalIsAlarmActive) {
+                pContainer.style.display = "none";
+                return;
+            }
+            
+            if (window.globalLatestPushTimestamp > 0) {
+                var now = new Date().getTime();
+                var diffSecs = Math.floor((now - window.globalLatestPushTimestamp) / 1000);
+                
+                if (diffSecs >= 0 && diffSecs <= 600) { 
+                    pContainer.style.display = "block";
+                    pContainer.style.borderColor = "#004455";
+                    var pct = (diffSecs / 600) * 100;
+                    pBar.style.width = pct + "%";
+                    
+                    if (diffSecs <= 240) {
+                        pBar.style.backgroundColor = "#00FF00";
+                    } else if (diffSecs <= 360) {
+                        pBar.style.backgroundColor = "#ff7700";
+                    } else if (diffSecs <= 540) {
+                        pBar.style.backgroundColor = "#ff0000";
+                    } else {
+                        pBar.style.backgroundColor = "#00FF00";
+                    }
+                } else {
+                    pContainer.style.display = "none";
+                }
+            } else {
+                pContainer.style.display = "none";
+            }
+        }
+
+        function checkHolonAlert() {
+            var nowTime = new Date().getTime();
+            if (isFetchingAlerts) {
+                if (nowTime - lockTime > 20000) { isFetchingAlerts = false; } else { return; }
+            }
+            isFetchingAlerts = true; lockTime = nowTime;
+            var targetUrl = "https://script.google.com/macros/s/AKfycbz_2w4SkUX2qxP27pVCX4g-tsZbtttKb5X95TGG4FBRcFihafSjQBDDkYQKfXOPraXQjA/exec";
+            var fetchUrl = targetUrl + "?v=" + lockTime;
+            
+            fetch(fetchUrl).then(function(response) {
+                if (!response.ok) throw new Error("HTTP Status: " + response.status);
+                return response.text();
+            }).then(function(rawText) {
+                isFetchingAlerts = false; var now = new Date();
+                var alertsData = []; var pushesData = [];
+                
+                if (rawText !== "" && rawText.indexOf("<") !== 0) {
+                    try {
+                        var parsedData = JSON.parse(rawText);
+                        if (Array.isArray(parsedData)) { alertsData = parsedData; }
+                        else { alertsData = parsedData.alerts || []; pushesData = parsedData.pushes || []; }
+                    } catch(e) {}
+                }
+                lastSuccessTime = now.getTime();
+                
+                var extractTimeObj = function(str) {
+                    var isoMatch = str.match(/"time"\s*:\s*"([^"]+)"/);
+                    if (isoMatch) {
+                        var isoStr = isoMatch[1];
+                        var d = new Date(isoStr);
+                        if (!isNaN(d.getTime())) return d;
+                    }
+                    var fMatch = str.match(/(\d{4}-\d{2}-\d{2})[T\s]([0-2]\d:[0-5]\d:[0-5]\d)/);
+                    if (fMatch) { 
+                        var dp = fMatch[1].split("-"), tp = fMatch[2].split(":"); 
+                        return new Date(dp[0], dp[1]-1, dp[2], tp[0], tp[1], tp[2]); 
+                    }
+                    var nMatch = str.match(/"(?:time|date|alertDate)"\s*:\s*(17\d{8,11})/i);
+                    if (nMatch) { var ts = parseInt(nMatch[1]); return new Date(ts > 9999999999 ? ts : ts * 1000); }
+                    var tMatch = str.match(/([0-2]\d):([0-5]\d):([0-5]\d)/);
+                    if (tMatch) { var d2 = new Date(); d2.setHours(parseInt(tMatch[1]), parseInt(tMatch[2]), parseInt(tMatch[3]), 0); return d2; }
+                    return null;
+                };
+
+                var startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).getTime();
+                var timeNowStr = now.toLocaleTimeString("he-IL");
+
+                var latestAlarmTime = 0, latestAlarmTimeStr = "שקט בחולון", alarmsToday = 0, isAlarmActive = false, alarmAgeMinutes = -1;
+                for (var j = 0; j < alertsData.length; j++) {
+                    var rowA = JSON.stringify(alertsData[j] || {});
+                    if (rowA.indexOf("חולון") !== -1) {
+                        var dObjA = extractTimeObj(rowA);
+                        if (dObjA) {
+                            var tsA = dObjA.getTime();
+                            if (tsA >= startOfDay) alarmsToday++;
+                            if (tsA > latestAlarmTime) {
+                                latestAlarmTime = tsA;
+                                var hA = dObjA.getHours(), mA = dObjA.getMinutes(), sA = dObjA.getSeconds();
+                                latestAlarmTimeStr = (hA < 10 ? "0"+hA : hA) + ":" + (mA < 10 ? "0"+mA : mA) + ":" + (sA < 10 ? "0"+sA : sA);
+                            }
+                            var diffA = (now.getTime() - tsA) / 60000;
+                            if (diffA < -1000) diffA += 1440;
+                            if (diffA <= 10 && diffA >= 0) { isAlarmActive = true; if (alarmAgeMinutes === -1 || diffA < alarmAgeMinutes) alarmAgeMinutes = diffA; }
+                        }
+                    }
+                }
+
+                if (latestAlarmTime > 0) {
+                    var diffHoursA = Math.floor((now.getTime() - latestAlarmTime) / 3600000);
+                    if (diffHoursA >= 96) {
+                        var daysA = Math.floor(diffHoursA / 24);
+                        latestAlarmTimeStr += " (+" + daysA + "י)";
+                    } else if (diffHoursA >= 24) {
+                        var hoursA = Math.floor(diffHoursA / 24) * 24;
+                        latestAlarmTimeStr += " (+" + hoursA + "ש)";
+                    }
+                }
+
+                var latestPushTime = 0, latestPushTimeStr = "שקט בחולון", pushesToday = 0, isPushActive = false, pushAgeMinutes = -1;
+                for (var k = 0; k < pushesData.length; k++) {
+                    var rowP = JSON.stringify(pushesData[k] || {});
+                    if (rowP.indexOf("חולון") !== -1) {
+                        var dObjP = extractTimeObj(rowP);
+                        if (dObjP) {
+                            var tsP = dObjP.getTime();
+                            if (tsP >= startOfDay) pushesToday++;
+                            if (tsP > latestPushTime) {
+                                latestPushTime = tsP;
+                                var hP = dObjP.getHours(), mP = dObjP.getMinutes(), sP = dObjP.getSeconds();
+                                latestPushTimeStr = (hP < 10 ? "0"+hP : hP) + ":" + (mP < 10 ? "0"+mP : mP) + ":" + (sP < 10 ? "0"+sP : sP);
+                            }
+                            var diffP = (now.getTime() - tsP) / 60000;
+                            if (diffP < -1000) diffP += 1440;
+                            if (diffP <= 10 && diffP >= 0) { isPushActive = true; if (pushAgeMinutes === -1 || diffP < pushAgeMinutes) pushAgeMinutes = diffP; }
+                        }
+                    }
+                }
+
+                if (latestPushTime > 0) {
+                    var diffHoursP = Math.floor((now.getTime() - latestPushTime) / 3600000);
+                    if (diffHoursP >= 96) {
+                        var daysP = Math.floor(diffHoursP / 24);
+                        latestPushTimeStr += " (+" + daysP + "י)";
+                    } else if (diffHoursP >= 24) {
+                        var hoursP = Math.floor(diffHoursP / 24) * 24;
+                        latestPushTimeStr += " (+" + hoursP + "ש)";
+                    }
+                }
+
+                window.globalIsAlarmActive = isAlarmActive;
+                window.globalLatestPushTimestamp = latestPushTime;
+
+                document.getElementById("val-alarm-last").innerHTML = latestAlarmTimeStr;
+                document.getElementById("val-alarm-count").innerHTML = alarmsToday;
+                
+                document.getElementById("val-sys-upd").innerHTML = timeNowStr;
+                
+                document.getElementById("val-push-last").innerHTML = latestPushTimeStr;
+                document.getElementById("val-push-count").innerHTML = pushesToday;
+
+                var statusDiv = document.getElementById("holon-status");
+                if (isAlarmActive) { 
+                    statusDiv.innerHTML = "אזעקה בחולון!"; 
+                    document.body.className = (alarmAgeMinutes <= 2) ? "emergency" : "shrapnel-alert"; 
+                }
+                else if (isPushActive) { 
+                    statusDiv.innerHTML = "חולון: צפי לאזעקה"; 
+                    document.body.className = (pushAgeMinutes <= 1) ? "warning-flicker" : "warning-static"; 
+                }
+                else { 
+                    document.body.className = ""; 
+                    statusDiv.innerHTML = "חולון: אין התרעות"; 
+                }
+            }).catch(function(error) { isFetchingAlerts = false; });
+        }
+
+        function checkConnectionHealth() {
+            var now = new Date().getTime(); 
+            var diffSeconds = (now - lastSuccessTime) / 1000;
+            var updCell = document.getElementById("update-cell");
+            if (updCell) {
+                updCell.style.color = (diffSeconds > 35) ? "#ff7700" : "#00E5FF";
+            }
+        }
+
+        function updateCountdown() {
+            var target = new Date(2026, 6, 1, 0, 0, 0); // 1 ביולי 2026 (חודש 6 ב-JS)
+            var diff = target - new Date();
+            if (diff <= 0) { document.getElementById("timer").innerHTML = "החופש הגדול התחיל!"; return; }
+            var d = Math.floor(diff/86400000), h = Math.floor((diff%86400000)/3600000), m = Math.floor((diff%3600000)/60000), s = Math.floor((diff%60000)/1000);
+            document.getElementById("timer").innerHTML = d + " ימים " + h + " שעות " + m + " דקות " + s + " שניות ";
+        }
+
+        setInterval(updateClock, 1000); 
+        setInterval(updateProgressBar, 1000); 
+        setInterval(updateCountdown, 1000); 
+        setInterval(checkHolonAlert, 15000); 
+        setInterval(checkConnectionHealth, 2000); 
+        setInterval(updateWeather, 900000);
+        
+        updateClock(); updateCountdown(); updateWeather(); checkHolonAlert();
+    </script>
+</body>
+</html>
