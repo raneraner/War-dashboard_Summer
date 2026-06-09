@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ran's Holon Radar v2.4</title>
+    <title>Ran's Holon Radar v2.5</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -79,7 +79,6 @@
         #clock { font-size: 90px; margin-bottom: 0; line-height: 90px; color: #00E5FF; margin-top: 10px; }
         #date { font-size: 28px; color: #0088A3; margin-top: 5px; margin-bottom: 35px; }
 
-        /* הגדרת ברירת מחדל למעלות - תוחלף דינמית ע"י ה-JS */
         #temp { font-size: 65px; font-weight: bold; margin-bottom: 15px; margin-top: 15px; }
         #uv-info, #sunset-info { font-size: 26px; color: #00A3B8; margin-top: 12px; }
 
@@ -119,8 +118,8 @@
         #row-pushes { color: #ffaa00; }
         
         .col-sep { text-align: center; width: 3%; color: #004455 !important; }
-        .col-right { text-align: right; width: 50%; }
-        .col-center { text-align: center; width: 47%; }
+        .col-right { text-align: right; width: 52%; }
+        .col-center { text-align: center; width: 45%; }
         
         #update-block { 
             text-align: right; 
@@ -156,12 +155,12 @@
                 <tr id="row-alarms">
                     <td class="col-right">אזעקה אחרונה: <span id="val-alarm-last">טוען...</span></td>
                     <td class="col-sep">|</td>
-                    <td class="col-center">אזעקות ביממה: <span id="val-alarm-count">0</span></td>
+                    <td class="col-center"><span id="lbl-alarm-count">אזעקות ביממה:</span> <span id="val-alarm-count">0</span></td>
                 </tr>
                 <tr id="row-pushes">
                     <td class="col-right">התרעה אחרונה: <span id="val-push-last">טוען...</span></td>
                     <td class="col-sep">|</td>
-                    <td class="col-center">התרעות ביממה: <span id="val-push-count">0</span></td>
+                    <td class="col-center"><span id="lbl-push-count">התרעות ביממה:</span> <span id="val-push-count">0</span></td>
                 </tr>
             </table>
             <div id="update-block">עודכן: <span id="val-sys-upd">--:--:--</span></div>
@@ -175,7 +174,7 @@
             <div class="section-title">אקלים ומדדים:</div>
             <div id="temp">--°C</div>
             <div id="uv-info">טוען מדד קרינה...</div>
-            <div id="sunset-info">טוען שעת שקיעה...</div>
+            <div id="sunset-info">טוען נתוני שמש...</div>
         </div>
     </div>
 
@@ -194,7 +193,8 @@
         window.globalIsAlarmActive = false;
         window.globalLatestPushTimestamp = 0;
 
-        var sunsetIconSvg = '<svg id="sunset-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v3M4.22 4.22l2.12 2.12M17.66 6.34l2.12-2.12M16 12a4 4 0 1 1-8 0"/><line x1="2" y1="18" x2="22" y2="18"/><path d="M4.22 19.78l1.58-1.58M18.2 18.2l1.58 1.58"/></svg>';
+        // שכתוב ה-SVG לקווים נקיים בלבד: קו אופק ישר וקשת עליונה (קערה הפוכה)
+        var sunIconSvg = '<svg id="sunset-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="18" x2="22" y2="18"/><path d="M6 18a6 6 0 0 1 12 0"/><line x1="12" y1="5" x2="12" y2="9"/><line x1="5.22" y1="11.22" x2="7.34" y2="13.34"/><line x1="18.78" y1="11.22" x2="16.66" y2="13.34"/></svg>';
 
         function updateClock() {
             var now = new Date();
@@ -205,44 +205,53 @@
         }
 
         function updateWeather() {
-            var url = "https://api.open-meteo.com/v1/forecast?latitude=32.01&longitude=34.78&current_weather=true&daily=uv_index_max,sunset&timezone=Asia%2FJerusalem";
+            // הוספת בקשת קרינה רגעית (current=uv_index) וזריחה (sunrise)
+            var url = "https://api.open-meteo.com/v1/forecast?latitude=32.01&longitude=34.78&current=temperature_2m,uv_index&daily=uv_index_max,sunrise,sunset&timezone=Asia%2FJerusalem";
             
             fetch(url).then(function(r){return r.json()}).then(function(data){
-                var tempVal = Math.round(data.current_weather.temperature);
+                var tempVal = Math.round(data.current.temperature_2m);
                 var tempEl = document.getElementById("temp");
                 tempEl.innerHTML = tempVal + "°C";
                 
-                // חישוב פאלטת צבעים קלאסית (ציאן -> צהוב -> כתום -> אדום)
                 var r, g, b;
                 if (tempVal <= 20) {
-                    r = 0; g = 229; b = 255; // ציאן
+                    r = 0; g = 229; b = 255;
                 } else if (tempVal <= 25) {
                     var p = (tempVal - 20) / 5;
                     r = Math.round(255 * p);
                     g = Math.round(229 + (255 - 229) * p);
-                    b = Math.round(255 - 255 * p); // מעבר לצהוב
+                    b = Math.round(255 - 255 * p);
                 } else if (tempVal <= 30) {
                     var p = (tempVal - 25) / 5;
                     r = 255;
-                    g = Math.round(255 - 255 * p); // מעבר דרך כתום לאדום
+                    g = Math.round(255 - 255 * p);
                     b = 0;
                 } else {
-                    r = 255; g = 0; b = 0; // אדום חזק
+                    r = 255; g = 0; b = 0;
                 }
                 tempEl.style.color = "rgb(" + r + "," + g + "," + b + ")";
 
+                // עדכון קרינה בפורמט המבוקש
+                var uvCurrent = data.current.uv_index;
                 var uvMax = data.daily.uv_index_max[0];
+                document.getElementById("uv-info").innerHTML = "קרינה: " + uvCurrent + " (שיא היום: " + uvMax + ")";
+
+                // לוגיקת החלפה אוטומטית בין שקיעה לזריחה לפי זמני אמת
+                var now = new Date();
                 var sunsetRaw = data.daily.sunset[0];
-                var sunsetTime = "--:--";
+                var sunsetDate = sunsetRaw ? new Date(sunsetRaw) : null;
                 
-                if (sunsetRaw) {
-                    var parts = sunsetRaw.split("T");
-                    if (parts[1]) {
-                        sunsetTime = parts[1].substring(0, 5);
+                if (sunsetDate && now < sunsetDate) {
+                    var sunsetTime = sunsetRaw.split("T")[1].substring(0, 5);
+                    document.getElementById("sunset-info").innerHTML = "שקיעה " + sunIconSvg + ": " + sunsetTime;
+                } else {
+                    var sunriseRaw = data.daily.sunrise[1]; // זריחה של מחר
+                    var sunriseTime = "--:--";
+                    if (sunriseRaw) {
+                        sunriseTime = sunriseRaw.split("T")[1].substring(0, 5);
                     }
+                    document.getElementById("sunset-info").innerHTML = "זריחה " + sunIconSvg + ": " + sunriseTime;
                 }
-                document.getElementById("uv-info").innerHTML = "שיא קרינה: " + uvMax;
-                document.getElementById("sunset-info").innerHTML = "שקיעה " + sunsetIconSvg + ": " + sunsetTime;
             });
         }
 
@@ -392,6 +401,11 @@
                         latestPushTimeStr += " (+" + hoursP + "ש)";
                     }
                 }
+
+                // לוגיקת כיווץ כותרות אוטומטית למניעת חריגה מעבר לקו האמצע
+                var hasPluses = latestAlarmTimeStr.indexOf("(") !== -1 || latestPushTimeStr.indexOf("(") !== -1;
+                document.getElementById("lbl-alarm-count").innerHTML = hasPluses ? "אזע׳ ביממה:" : "אזעקות ביממה:";
+                document.getElementById("lbl-push-count").innerHTML = hasPluses ? "התרע׳ ביממה:" : "התרעות ביממה:";
 
                 window.globalIsAlarmActive = isAlarmActive;
                 window.globalLatestPushTimestamp = latestPushTime;
