@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ran's Holon Radar v2.5</title>
+    <title>Ran's Holon Radar v2.7</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -111,6 +111,7 @@
             width: 0%; height: 100%; transition: width 1s linear, background-color 1s; 
         }
 
+        /* שחזור מידות גרסה 2.5 המקורית */
         #debug-table { width: 100%; margin: 30px auto 0 auto; font-size: 18px; border-collapse: collapse; direction: rtl; }
         #debug-table td { padding: 8px; transition: color 0.3s; white-space: nowrap; }
         
@@ -144,6 +145,7 @@
 <body>
     
     <div id="dashboard-grid">
+        <!-- פנל מבצעי (ימין) -->
         <div id="right-panel" class="panel">
             <div class="section-title">מלחמה:</div>
             <div id="status-wrapper">
@@ -154,18 +156,19 @@
             <table id="debug-table">
                 <tr id="row-alarms">
                     <td class="col-right">אזעקה אחרונה: <span id="val-alarm-last">טוען...</span></td>
-                    <td class="col-sep">|</td>
-                    <td class="col-center"><span id="lbl-alarm-count">אזעקות ביממה:</span> <span id="val-alarm-count">0</span></td>
+                    <td class="col-sep" id="sep-alarm">|</td>
+                    <td class="col-center" id="cell-alarm-count">אזעקות ביממה: <span id="val-alarm-count">0</span></td>
                 </tr>
                 <tr id="row-pushes">
                     <td class="col-right">התרעה אחרונה: <span id="val-push-last">טוען...</span></td>
-                    <td class="col-sep">|</td>
-                    <td class="col-center"><span id="lbl-push-count">התרעות ביממה:</span> <span id="val-push-count">0</span></td>
+                    <td class="col-sep" id="sep-push">|</td>
+                    <td class="col-center" id="cell-push-count">התרעות ביממה: <span id="val-push-count">0</span></td>
                 </tr>
             </table>
             <div id="update-block">עודכן: <span id="val-sys-upd">--:--:--</span></div>
         </div>
 
+        <!-- פנל זמן ואקלים (שמאל) -->
         <div id="left-panel" class="panel">
             <div class="section-title">היום:</div>
             <div id="clock">00:00:00</div>
@@ -174,12 +177,13 @@
             <div class="section-title">אקלים ומדדים:</div>
             <div id="temp">--°C</div>
             <div id="uv-info">טוען מדד קרינה...</div>
-            <div id="sunset-info">טוען נתוני שמש...</div>
+            <div id="sunset-info">טוען שעת שקיעה...</div>
         </div>
     </div>
 
     <div class="separator"></div>
 
+    <!-- פנל תחתון - החופש הגדול -->
     <div id="bottom-panel">
         <div class="section-title">☀️ הספירה לאחור לתחילת החופש הגדול 🌊</div>
         <div id="timer">טוען...</div>
@@ -193,8 +197,7 @@
         window.globalIsAlarmActive = false;
         window.globalLatestPushTimestamp = 0;
 
-        // שכתוב ה-SVG לקווים נקיים בלבד: קו אופק ישר וקשת עליונה (קערה הפוכה)
-        var sunIconSvg = '<svg id="sunset-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="18" x2="22" y2="18"/><path d="M6 18a6 6 0 0 1 12 0"/><line x1="12" y1="5" x2="12" y2="9"/><line x1="5.22" y1="11.22" x2="7.34" y2="13.34"/><line x1="18.78" y1="11.22" x2="16.66" y2="13.34"/></svg>';
+        var sunsetIconSvg = '<svg id="sunset-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="18" x2="22" y2="18"/><path d="M6 18a6 6 0 0 1 12 0"/><line x1="12" y1="5" x2="12" y2="9"/><line x1="5.22" y1="11.22" x2="7.34" y2="13.34"/><line x1="18.78" y1="11.22" x2="16.66" y2="13.34"/></svg>';
 
         function updateClock() {
             var now = new Date();
@@ -205,8 +208,7 @@
         }
 
         function updateWeather() {
-            // הוספת בקשת קרינה רגעית (current=uv_index) וזריחה (sunrise)
-            var url = "https://api.open-meteo.com/v1/forecast?latitude=32.01&longitude=34.78&current=temperature_2m,uv_index&daily=uv_index_max,sunrise,sunset&timezone=Asia%2FJerusalem";
+            var url = "https://api.open-meteo.com/v1/forecast?latitude=32.01&longitude=34.78&current_weather=true&current=temperature_2m,uv_index&daily=uv_index_max,sunrise,sunset&timezone=Asia%2FJerusalem";
             
             fetch(url).then(function(r){return r.json()}).then(function(data){
                 var tempVal = Math.round(data.current.temperature_2m);
@@ -231,26 +233,24 @@
                 }
                 tempEl.style.color = "rgb(" + r + "," + g + "," + b + ")";
 
-                // עדכון קרינה בפורמט המבוקש
                 var uvCurrent = data.current.uv_index;
                 var uvMax = data.daily.uv_index_max[0];
                 document.getElementById("uv-info").innerHTML = "קרינה: " + uvCurrent + " (שיא היום: " + uvMax + ")";
 
-                // לוגיקת החלפה אוטומטית בין שקיעה לזריחה לפי זמני אמת
                 var now = new Date();
                 var sunsetRaw = data.daily.sunset[0];
                 var sunsetDate = sunsetRaw ? new Date(sunsetRaw) : null;
                 
                 if (sunsetDate && now < sunsetDate) {
                     var sunsetTime = sunsetRaw.split("T")[1].substring(0, 5);
-                    document.getElementById("sunset-info").innerHTML = "שקיעה " + sunIconSvg + ": " + sunsetTime;
+                    document.getElementById("sunset-info").innerHTML = "שקיעה " + sunsetIconSvg + ": " + sunsetTime;
                 } else {
-                    var sunriseRaw = data.daily.sunrise[1]; // זריחה של מחר
+                    var sunriseRaw = data.daily.sunrise[1];
                     var sunriseTime = "--:--";
                     if (sunriseRaw) {
                         sunriseTime = sunriseRaw.split("T")[1].substring(0, 5);
                     }
-                    document.getElementById("sunset-info").innerHTML = "זריחה " + sunIconSvg + ": " + sunriseTime;
+                    document.getElementById("sunset-info").innerHTML = "זריחה " + sunsetIconSvg + ": " + sunriseTime;
                 }
             });
         }
@@ -360,8 +360,9 @@
                     }
                 }
 
+                var diffHoursA = 0;
                 if (latestAlarmTime > 0) {
-                    var diffHoursA = Math.floor((now.getTime() - latestAlarmTime) / 3600000);
+                    diffHoursA = Math.floor((now.getTime() - latestAlarmTime) / 3600000);
                     if (diffHoursA >= 96) {
                         var daysA = Math.floor(diffHoursA / 24);
                         latestAlarmTimeStr += " (+" + daysA + "י)";
@@ -391,8 +392,9 @@
                     }
                 }
 
+                var diffHoursP = 0;
                 if (latestPushTime > 0) {
-                    var diffHoursP = Math.floor((now.getTime() - latestPushTime) / 3600000);
+                    diffHoursP = Math.floor((now.getTime() - latestPushTime) / 3600000);
                     if (diffHoursP >= 96) {
                         var daysP = Math.floor(diffHoursP / 24);
                         latestPushTimeStr += " (+" + daysP + "י)";
@@ -402,10 +404,14 @@
                     }
                 }
 
-                // לוגיקת כיווץ כותרות אוטומטית למניעת חריגה מעבר לקו האמצע
-                var hasPluses = latestAlarmTimeStr.indexOf("(") !== -1 || latestPushTimeStr.indexOf("(") !== -1;
-                document.getElementById("lbl-alarm-count").innerHTML = hasPluses ? "אזע׳ ביממה:" : "אזעקות ביממה:";
-                document.getElementById("lbl-push-count").innerHTML = hasPluses ? "התרע׳ ביממה:" : "התרעות ביממה:";
+                // לוגיקת הסתרת מונים סלקטיבית (שני מצבים)
+                var showAlarmCount = (latestAlarmTime > 0 && diffHoursA < 24);
+                document.getElementById("sep-alarm").style.display = showAlarmCount ? "table-cell" : "none";
+                document.getElementById("cell-alarm-count").style.display = showAlarmCount ? "table-cell" : "none";
+
+                var showPushCount = (latestPushTime > 0 && diffHoursP < 24);
+                document.getElementById("sep-push").style.display = showPushCount ? "table-cell" : "none";
+                document.getElementById("cell-push-count").style.display = showPushCount ? "table-cell" : "none";
 
                 window.globalIsAlarmActive = isAlarmActive;
                 window.globalLatestPushTimestamp = latestPushTime;
