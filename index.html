@@ -111,7 +111,6 @@
             width: 0%; height: 100%; transition: width 1s linear, background-color 1s; 
         }
 
-        /* שחזור מידות גרסה 2.5 המקורית */
         #debug-table { width: 100%; margin: 30px auto 0 auto; font-size: 18px; border-collapse: collapse; direction: rtl; }
         #debug-table td { padding: 8px; transition: color 0.3s; white-space: nowrap; }
         
@@ -145,7 +144,6 @@
 <body>
     
     <div id="dashboard-grid">
-        <!-- פנל מבצעי (ימין) -->
         <div id="right-panel" class="panel">
             <div class="section-title">מלחמה:</div>
             <div id="status-wrapper">
@@ -168,7 +166,6 @@
             <div id="update-block">עודכן: <span id="val-sys-upd">--:--:--</span></div>
         </div>
 
-        <!-- פנל זמן ואקלים (שמאל) -->
         <div id="left-panel" class="panel">
             <div class="section-title">היום:</div>
             <div id="clock">00:00:00</div>
@@ -183,7 +180,6 @@
 
     <div class="separator"></div>
 
-    <!-- פנל תחתון - החופש הגדול -->
     <div id="bottom-panel">
         <div class="section-title">☀️ הספירה לאחור לתחילת החופש הגדול 🌊</div>
         <div id="timer">טוען...</div>
@@ -208,9 +204,12 @@
         }
 
         function updateWeather() {
-            var url = "https://api.open-meteo.com/v1/forecast?latitude=32.01&longitude=34.78&current_weather=true&current=temperature_2m,uv_index&daily=uv_index_max,sunrise,sunset&timezone=Asia%2FJerusalem";
+            // תיקון ה-API לשימוש ב-hourly עבור uv_index למניעת שגיאת שרת 400
+            var url = "https://api.open-meteo.com/v1/forecast?latitude=32.01&longitude=34.78&current=temperature_2m&hourly=uv_index&daily=uv_index_max,sunrise,sunset&timezone=Asia%2FJerusalem";
             
             fetch(url).then(function(r){return r.json()}).then(function(data){
+                if (!data || !data.current || !data.hourly || !data.daily) return;
+
                 var tempVal = Math.round(data.current.temperature_2m);
                 var tempEl = document.getElementById("temp");
                 tempEl.innerHTML = tempVal + "°C";
@@ -233,7 +232,9 @@
                 }
                 tempEl.style.color = "rgb(" + r + "," + g + "," + b + ")";
 
-                var uvCurrent = data.current.uv_index;
+                // חילוץ המדד השעתי התואם לשעה הנוכחית של המכשיר
+                var currentHour = new Date().getHours();
+                var uvCurrent = data.hourly.uv_index[currentHour] !== undefined ? data.hourly.uv_index[currentHour] : "--";
                 var uvMax = data.daily.uv_index_max[0];
                 document.getElementById("uv-info").innerHTML = "קרינה: " + uvCurrent + " (שיא היום: " + uvMax + ")";
 
@@ -404,7 +405,6 @@
                     }
                 }
 
-                // לוגיקת הסתרת מונים סלקטיבית (שני מצבים)
                 var showAlarmCount = (latestAlarmTime > 0 && diffHoursA < 24);
                 document.getElementById("sep-alarm").style.display = showAlarmCount ? "table-cell" : "none";
                 document.getElementById("cell-alarm-count").style.display = showAlarmCount ? "table-cell" : "none";
